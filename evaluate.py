@@ -24,40 +24,58 @@ def load_knowledge_base(kb_dir: str) -> str:
     
     return "\n".join(kb_content)
 
-def simulate_llm_response(agent: AgentPersona, cr_content: str, kb_context: str) -> str:
+import json
+import urllib.request
+import urllib.error
+
+def call_local_llm(messages, model="local-model", temperature=0.7):
     """
-    Mocks an LLM response with Knowledge Base awareness.
+    Sends a request to the local LLM server (compatible with OpenAI API).
+    Default URL: http://localhost:1234/v1/chat/completions
     """
-    print(f"\n--- [Simulating AI Evaluation for: {agent.role_name}] ---")
+    url = "http://localhost:1234/v1/chat/completions"
     
-    # In a real scenario, the prompt would be:
-    # System: agent.system_instruction + "\n\nCONTEXT:\n" + kb_context
-    # User: cr_content
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": False
+    }
     
-    # Mock logic checking for KB violations
-    if "Architect" in agent.role_name:
-        if "Java" in cr_content and "NO JAVA" in kb_context:
-            return f"""
-**Feasibility**: No
-**Architectural Impact**: Critical
-**Technical Constraints**:
-* **VIOLATION**: The Knowledge Base explicitly states "NO JAVA". We must use Python or C#.
-"""
-        return f"""
-**Feasibility**: Yes.
-**Architectural Impact**: Low.
-**Note**: Verified against Architecture Rules (Python/FastAPI compliant).
-"""
-        
-    if "Product Owner" in agent.role_name:
-        return f"""
-**Decision**: Approve
-**Reasoning**:
-* Aligns with the roadmap.
-**Priority**: High
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(
+        url, 
+        data=data, 
+        headers={'Content-Type': 'application/json'}
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            result = json.load(response)
+            return result['choices'][0]['message']['content']
+    except urllib.error.URLError as e:
+        return f"Error connecting to Local LLM at {url}: {e}. Is LMStudio/Ollama running?"
+
+def get_ai_response(agent: AgentPersona, cr_content: str, kb_context: str) -> str:
+    """
+    Generates an AI response using the local LLM.
+    """
+    print(f"\n--- [Consulting {agent.role_name} via Local LLM] ---")
+    
+    system_prompt = f"""
+{agent.system_instruction}
+
+--- KNOWLEDGE BASE CONTEXT ---
+Use the following context to check for violations or rules.
+{kb_context}
 """
 
-    return f"**Analysis**: Looks reasonable. Context checked."
+    messages = [
+        {"role": "system", "content": system_prompt.strip()},
+        {"role": "user", "content": f"Evaluate this Change Request:\n\n{cr_content}"}
+    ]
+    
+    return call_local_llm(messages)
 
 def evaluate_cr(cr_filepath: str):
     print(f"Loading Change Request from: {cr_filepath}...")
@@ -82,7 +100,7 @@ def evaluate_cr(cr_filepath: str):
         print(f"> Focus: {', '.join(agent.focus_areas)}")
         
         # Here we invoke the "AI" with Context
-        response = simulate_llm_response(agent, cr_content, kb_context)
+        response = get_ai_response(agent, cr_content, kb_context)
         
         results[agent.role_name] = response
         print(f"\n{response}\n" + "-"*40)

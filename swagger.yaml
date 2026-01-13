@@ -1,0 +1,567 @@
+openapi: 3.1.1
+info:
+  title: Sodexo Integration API
+  version: 1.0.0
+  description: |
+    Integration API for managing item loans and returns. Includes endpoints for checking item status, marking items as lent and deposited, initiating terminal verification and managing terminals.
+servers:
+  - url: https://development-api.relevo-admin.de/
+    description: Dev server
+
+tags:
+  - name: Items
+    description: Operations related to items
+  - name: Terminals
+    description: Operations related to Relevo Stripe terminals
+  - name: Users
+    description: Operations related to users
+security:
+  - ApiKey: []
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  parameters:
+    ApiKeyHeader:
+      name: x-api-key
+      in: header
+      required: true
+      schema:
+        type: string
+    LocalizationHeader:
+      name: x-localization
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [en, de]
+        default: en
+    PosHeader:
+      name: x-pos-id
+      in: header
+      required: true
+      description: Unique identifier of the specific POS terminal
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ItemStatusResponse:
+      type: object
+      properties:
+        item:
+          type: object
+          properties:
+            uId:
+              type: string
+              example: kH7NCVOxXNjdrvUBfaFjP1O2z
+            name:
+              type: string
+              example: Leonard
+            category:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 15
+                name:
+                  type: string
+                  example: 1100ml Bowl
+                image:
+                  type: string
+                  example: https://production-public-files.s3.eu-west-1.amazonaws.com/category-images/SAN_Bowl.png
+                lend:
+                  type: object
+                  properties:
+                    durationInDays:
+                      type: integer
+                      description: Number of days for card-based borrowing â€“ the length of the borrowing period when payment is made with a card
+                      example: 14
+                    climateFeeAmount:
+                      description: Loan fee (minor currency units) â€“ the amount charged if the item is not returned on time
+                      $ref: '#/components/schemas/Money'
+            deposit:
+              type: object
+              properties:
+                durationInDays:
+                  type: integer
+                  description: Number of days for deposit-based loans â€“ the length of the loan period for which a refundable deposit is applied
+                  example: 7
+                depositAmount:
+                  description:  Amount for deposit-based loans (minor currency units) â€“ the fee charged when loan with a refundable deposit
+                  $ref: '#/components/schemas/Money'
+        status:
+          description: >
+            Current lifecycle status of the item. The concrete object shape depends on the `code`
+            discriminator and can be one of `StatusAvailable`, `StatusDeposited`, or `StatusLent`.
+          oneOf:
+            - $ref: '#/components/schemas/StatusAvailable'
+            - $ref: '#/components/schemas/StatusDeposited'
+            - $ref: '#/components/schemas/StatusLent'
+          discriminator:
+            propertyName: code
+            mapping:
+              available: '#/components/schemas/StatusAvailable'
+              deposited: '#/components/schemas/StatusDeposited'
+              lent: '#/components/schemas/StatusLent'
+
+    StatusAvailable:
+      description: Item is available and has not yet been lent or deposited.
+      type: object
+      required: [ code ]
+      properties:
+        code:
+          const: available
+          type: string
+
+    StatusDeposited:
+      description: Item has been lent with a refundable deposit. Contains deposit amount, deposit date, due date, and expiration flag. May also contain the user badge id if associated with the user.
+      type: object
+      required: [ code, depositAmount, isExpired, dueAt, depositedAt, badgeId ]
+      properties:
+        code:
+          const: deposited
+          type: string
+        depositAmount:
+          $ref: '#/components/schemas/Money'
+        isExpired:
+          type: boolean
+          example: false
+        depositedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp at which the refundable deposit was recorded for this item
+          example: "2025-08-14T16:00:00Z"
+        dueAt:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC deadline for returning the item (may include an explicit offset instead of "Z")
+          example: "2025-08-14T18:00:00+02:00"
+        badgeId:
+          type: ["string", "null"]
+          description: Unique identifier of the user badge
+          example: badge-id
+    
+    StatusLent:
+      description: Item has been lent by user. Contains possible climateâ€‘fee amount, lent date, due date, and expiration flag. May also contain the user badge id if associated with the user.
+      type: object
+      required: [ code, climateFeeAmount, isExpired, lentAt, dueAt, badgeId ]
+      properties:
+        code:
+          const: lent
+          type: string
+        climateFeeAmount:
+          $ref: '#/components/schemas/Money'
+        isExpired:
+          type: boolean
+          example: false
+        lentAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC showing the exact moment the item was lent out to the user (may include an explicit offset instead of "Z")
+          example: "2025-08-14T16:00:00Z"
+        dueAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC deadline for returning the item (may include an explicit offset instead of "Z")
+          example: "2025-08-14T18:00:00+02:00"
+        badgeId:
+          type: [ "string", "null" ]
+          description: Unique identifier of the user badge
+          example: badge-id
+    Money:
+      type: object
+      required: [ value, currency ]
+      properties:
+        value:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Amount in **minor currency units** (e.g. cents)
+          example: 1000
+        currency:
+          type: string
+          enum: [ EUR, CHF ]
+#          pattern: '^[A-Z]{3}$'  # ISO-4217
+#          description: Three-letter ISO-4217 currency code.
+          example: EUR
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machineâ€‘readable error code
+          example: ERROR_CODE
+        message:
+          type: string
+          description: Humanâ€‘readable description of the error
+          example: "Error message"
+
+    ItemActionRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          description: List of item identifiers - uIds (e.g. kH7NCVOxXNjdrvUBfaFjP1O2z), or item QR codes (e.g. https://app.relevo.de/borrow/?uid=H65Fu7wxYIpbHP1vbYT3kzESh&n=Mava)
+          items:
+            type: string
+          example:
+            - kH7NCVOxXNjdrvUBfaFjP1O2z
+            - https://app.relevo.de/borrow/?uid=H65Fu7wxYIpbHP1vbYT3kzESh&n=Mava
+        badgeId:
+          type: string
+          description: Unique identifier of the user badge
+          example: badge-id
+
+    TerminalVerificationRequest:
+      type: object
+      properties:
+        verificationMethod:
+          type: string
+          enum: [card, qr_code]
+          description: Pre-select verification method used by the Relevo Terminal
+
+    TerminalRegisterRequest:
+      type: object
+      required: [qrCode]
+      properties:
+        qrCode:
+          type: string
+          description: QRâ€¯code string scanned from the Stripe Terminal
+          example: "STR_TERM_ABC123XYZ"
+
+    TerminalRegisterResponse:
+      type: object
+      required: [terminalId]
+      properties:
+        terminalId:
+          type: string
+          format: uuid
+          description: Unique identifier assigned to the registered terminal
+          example: "term_9c2f1b80-1234-4f3a-9d2e-8dcb64b4e001"
+
+    ErrorItem:
+      type: object
+      properties:
+        uId:
+          type: string
+        errorMessage:
+          type: string
+        errorCode:
+          type: string
+
+    ItemLendResponse:
+      type: object
+      properties:
+        lentItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStatusResponse'
+        notLentItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+
+    ItemReturnResponse:
+      type: object
+      properties:
+        returnedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStatusResponse'
+        notReturnedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+
+    DebtResponse:
+      type: object
+      properties:
+        debtAmount:
+          $ref: '#/components/schemas/Money'
+        indebtedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStatusResponse'
+
+    LoanResponse:
+      type: object
+      properties:
+        loanAmount:
+          $ref: '#/components/schemas/Money'
+        lentItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStatusResponse'
+
+    UserResponse:
+      type: object
+      properties:
+        debt:
+          $ref: '#/components/schemas/DebtResponse'
+        loan:
+          $ref: '#/components/schemas/LoanResponse'
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid x-api-key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Terminal already registered for this POS. Delete the existing terminal first
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ItemNotFound:
+      description: Item not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TerminalNotFound:
+      description: Stripe terminal not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Bad request â€“ malformed data or missing parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  /items/status:
+    get:
+      tags:
+        - Items
+      summary: Get the status of a specific item
+      description: By sending item `uId/qrCode` as a query parameter, the endpoint returns detailed information and the current status for the referenced item. <br />
+        When the full QR-code URL is supplied as the item parameter, the value must be percent-encoded before sending the request <br />
+        (e.g. https://app.relevo.de/borrow/?uid=H65Fu7wxYIpbHP1vbYT3kzESh&n=Mava â†’ https%3A%2F%2Fapp.relevo.de%2Fborrow%2F%3Fuid%3DH65Fu7wxYIpbHP1vbYT3kzESh%26n%3DMava).
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+        - name: item
+          in: query
+          required: true
+          description: Item identifier - uId (e.g. kH7NCVOxXNjdrvUBfaFjP1O2z), or item QR code (e.g. https://app.relevo.de/borrow/?uid=H65Fu7wxYIpbHP1vbYT3kzESh&n=Mava)
+          schema:
+            type: string
+            example: https://app.relevo.de/borrow/?uid=H65Fu7wxYIpbHP1vbYT3kzESh&n=Mava
+      responses:
+        '200':
+          description: Item status and information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ItemNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /items/lend/deposit:
+    post:
+      tags:
+        - Items
+      summary: Mark Items as a deposit
+      description: By posting an array of item `uIds/qrCodes` to this endpoint, the referenced items will be lent out **as a deposit**. By sending the `badgeId` identifier in the request body, the items will be associated with the user. The endpoint returns the Relevo item uIds which have been successfully lent out as a deposit. Even though this is an edge case, the response also contains an array of item uIds that could not be lent out as a deposit.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemActionRequest'
+      responses:
+        '200':
+          description: Mark as a deposit result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemLendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /items/return:
+    post:
+      tags:
+        - Items
+      summary: Return lent items
+      description: |
+        By posting an array of item `uIds/qrCodes` to this endpoint, the referenced items will be marked as returned.  
+        The endpoint returns the item `uIds` that were successfully returned.  
+        If any items could not be returned (e.g., they are not currently lent), the response includes them in `notReturnedItems` with an error.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemActionRequest'
+      responses:
+        '200':
+          description: Return as deposit result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemReturnResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /terminals:
+    post:
+      tags:
+        - Terminals
+      summary: Register a new Stripe terminal
+      description: >
+        Registers a new Stripe terminal for the current POS.  
+        The client sends the terminalâ€™s QRâ€‘code string, and the API returns
+        the newly assigned `terminalId`.  
+        **Note:** Only one terminal can be active per POS at a time.  
+        If a terminal is already registered, the call returns **403â€¯Forbidden**.  
+        Delete the existing terminal (`DELETE /terminals`) before registering a new one.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminalRegisterRequest'
+      responses:
+        '201':
+          description: Terminal registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalRegisterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TerminalNotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    delete:
+      tags:
+        - Terminals
+      summary: Unregister (delete) the current Stripe terminal
+      description: >
+        Unregisters the Stripe terminal identified by the `x-pos-id` header. No request body is required.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+      responses:
+        '204':
+          description: Terminal deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/TerminalNotFound'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /terminals/verification/init:
+    post:
+      tags:
+        - Terminals
+      summary: Request reader verification
+      description: By posting an array of item `uIds/qrCodes` to this endpoint, the terminal will wake up, confirms the device is online, launch the verification flow for each of those items.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ItemActionRequest'
+                - $ref: '#/components/schemas/TerminalVerificationRequest'
+      responses:
+        '201':
+          description: Verification initialized successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/TerminalNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /users/badges/{badgeId}:
+    get:
+      tags:
+        - Users
+      summary: Get lent and indebted items for the user
+      description: By sending a `badgeId` as a path parameter, the endpoint returns the outstanding debt for the user, as well as the currently lent items.
+      parameters:
+        - $ref: '#/components/parameters/ApiKeyHeader'
+        - $ref: '#/components/parameters/LocalizationHeader'
+        - $ref: '#/components/parameters/PosHeader'
+        - name: badgeId
+          in: path
+          required: true
+          description: Unique identifier of the user badge
+          schema:
+            type: string
+            example: badge-id
+      responses:
+        '200':
+          description: Lent and indebted items for the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
