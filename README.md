@@ -1,4 +1,4 @@
-# Dishware V1 - POS Change Request Evaluation System
+# POS Change Request Evaluation System
 
 This project implements a Multi-Agent System to evaluate Change Requests (CRs) for a Point of Sale (POS) application.
 
