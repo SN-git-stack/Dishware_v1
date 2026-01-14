@@ -65,14 +65,21 @@ def generate_functional_spec(cr_filepath):
     
     spec_content = call_local_llm(messages)
 
-    # Save
+    # --- Generate Executive Summary for the Spec ---
+    print("   > Generating Executive Summary...")
+    summary_prompt = "Summarize this Functional Specification for a Lead Developer in 5 bullet points (Scope, Key Tech Changes, Risks)."
+    summary_messages = [
+        {"role": "system", "content": "You are a Technical Lead."},
+        {"role": "user", "content": f"{summary_prompt}\n\nSPEC CONTENT:\n{spec_content}"}
+    spec_content = call_local_llm(messages)
+
+    # Save: Functional Spec (Detailed)
     base, _ = os.path.splitext(cr_filepath)
-    output_path = f"{base}_FUNC_SPEC.md"
-    
-    with open(output_path, "w", encoding="utf-8") as f:
+    path_spec = f"{base}_FUNC_SPEC.md"
+    with open(path_spec, "w", encoding="utf-8") as f:
+        f.write(f"# Functional Specification: {os.path.basename(cr_filepath)}\n\n")
         f.write(spec_content)
-        
-    print(f"\nSuccess! Functional Spec created at:\n{output_path}")
+    print(f"\nSuccess! Detailed Spec created at:\n{path_spec}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a Functional Spec from a CR.")

@@ -1,0 +1,4 @@
+I want a feature to allow managers to override the price of an item at the POS.
+However, this should trigger a "Manager Approval" popup where they need to enter a PIN.
+It should also log this exact override amount in the audit log for the XML transaction.
+This is needed for clearing out near-expiry stock in the evening.

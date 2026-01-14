@@ -1,41 +1,58 @@
+# Functional Specification: bill_splitting_by_items.md
+
 # Functional Specification: Bill Splitting by Items
 
 ## 1. Logic Flow & Algorithms
-### Step-by-Step Breakdown:
 
-1. **Initial Order Selection:** When a group selects items for bill splitting, the system will identify all distinct items across orders within that group.
-2. **Item-Level Cost Calculation:** Calculate individual item costs based on quantities ordered and corresponding menu prices.
-3. **Total Cost Computation:** For each order within the group, compute the total cost by summing the costs of selected items.
-4. **Equal Split Option:** Offer users the option to split the bill equally among all customers in the group for each order (default).
-5. **Item-Level Payment Processing:** If a user selects specific items or wants to pay for an individual item differently, update the payment processing workflow accordingly:
-    *   For equal splits: Process payments based on total costs of orders and handle partial payments if necessary.
-    *   For item-level splits: Handle multiple payments and track item-wise payments separately.
+1.  When a user initiates the bill splitting process, the system will prompt them to select specific items from their order.
+2.  Upon item selection, the system will calculate the total cost for each selected item separately and display this information to the user.
+3.  The user can choose to pay for individual items or split them equally among group members.
+4.  If a user selects an item that was not consumed by any other group member, the system will display a warning message indicating that the item is not part of anyone else's order.
+5.  In cases where multiple groups are splitting the same bill, the system will use a unique group ID to differentiate between them and maintain accurate records.
+
+## Algorithm: Calculate Item Costs
+
+1.  **Get Order Items**: Retrieve a list of items ordered by the user.
+2.  **Filter Selected Items**: Filter out only the selected items from the order item list.
+3.  **Calculate Total Cost**: Calculate the total cost for each selected item separately.
+4.  **Display Item Costs**: Display the calculated total costs for each item to the user.
+
+## Algorithm: Handle Bill Splitting
+
+1.  **Get Group Members**: Retrieve a list of group members involved in the bill splitting process.
+2.  **Determine Payment Method**: Determine the payment method chosen by the user (individual items or equal split).
+3.  **Process Payments**: Process payments for each selected item based on the chosen payment method.
+
+## Algorithm: Handle Edge Cases
+
+1.  **Internet Cuts Out Mid-Transaction**: If the internet connection is lost during an ongoing bill split transaction, the system will:
+    *   Preserve data in a local cache (if enabled).
+    *   Resume the transaction when the internet connection is restored.
+2.  **App Crashes During Bill Splitting Flow**: If the app crashes while a user is splitting the bill, the system will:
+    *   Automatically recover and restore the bill split session upon re-launching the app.
+3.  **Insufficient Funds or Failed Payment Attempts**: If a payment method fails (e.g., insufficient funds) during an ongoing transaction:
+
+    *   Display an error message to the user indicating the failed payment attempt.
+    *   Prompt the user to retry the payment.
 
 ## 2. API & Data Changes
 
-*   **OrderItem Table Update:** Introduce a new column `item_cost` in the existing OrderItem table to store individual item costs for accurate calculations.
-*   **Payment Processing Workflow:** Modify the payment processing workflow to accommodate:
-    *   **Split Bill Endpoint:** Create a new endpoint (`POST /split-bill`) for initiating bill splitting and receiving payment details (e.g., card numbers or cash amounts).
-    *   **Item-Level Payment Tracking:** Store item-wise payments in a separate database table (`item_payments`) with columns `order_id`, `item_name`, `payment_amount`.
-*   **Database Schema Update:** Implement the following to ensure accurate data synchronization:
-    *   **Sync Strategy:** Create a new API endpoint (`POST /sync-data`) for syncing data when internet connectivity is restored.
-    *   **Local Cache Storage:** Utilize a local database or caching mechanism (e.g., Redis) to store temporary item-wise payment data during offline mode.
+1.  **XML Schema Updates**:
+    *   Update the XML schema to include additional elements for item costs and corresponding payments.
+2.  **Database Modifications**:
+    *   Optimize database queries to ensure efficient data retrieval.
+    *   Index relevant columns for improved query performance.
 
 ## 3. Error Handling & Edge Cases
 
-*   **Offline Mode Error Handling:**
-    +   **Sync Failed Errors:** If the sync process fails, display an error message informing users about the failure and prompting them to try again when internet connectivity is restored.
-    +   **Data Inconsistency Detection:** Implement a data validation mechanism to detect inconsistencies in item-wise payments during online mode. Display warnings or errors if discrepancies are found.
-*   **Edge Cases:**
-    +   **Large Groups or Complex Orders:** Apply performance optimization techniques (e.g., lazy loading) for handling large groups or complex orders with many items.
-    +   **Partial Payments or Cancellations:** Implement a flexible payment processing system to handle:
-        *   Partial payments by storing the remaining balance in `item_payments`.
-        *   Item cancellations by updating the corresponding item costs and reprocessing the total order cost.
+1.  **Error Messages**: Display clear error messages when handling edge cases, such as internet connectivity loss or failed payment attempts.
+2.  **Warning Messages**: Display warning messages when an item is not part of anyone else's order (e.g., "Item 'X' was not selected by any group member").
+3.  **Data Preservation**: Implement data preservation mechanisms to prevent data loss in case of app crashes or internet connectivity issues.
 
 ## 4. UI/UX Rules
 
-*   **UI Updates:**
-    +   **Item Selection Interface:** Design an intuitive interface for users to select items from their orders during bill splitting.
-    +   **Payment Processing Display:** Update payment processing information (e.g., remaining balances, split percentages) in real-time as users make payments or cancel items.
-*   **Error Messages and Warnings:**
-    +   Display user-friendly error messages and warnings when encountering issues like data inconsistencies or sync failures.
+1.  **User-Friendly Interface**: Design a user-friendly interface that allows users to select specific items from their order when splitting the bill.
+2.  **Clear Instructions**: Display clear instructions for paying for individual items or splitting them equally among group members.
+3.  **Visual Indicators**: Use visual indicators (e.g., colors, icons) to distinguish between selected and non-selected items.
+
+By following this functional specification, we can ensure a seamless implementation of the bill splitting by items feature, addressing key constraints and edge cases along the way.

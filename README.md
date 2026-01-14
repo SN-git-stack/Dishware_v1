@@ -7,22 +7,19 @@ This project implements a Multi-Agent System to evaluate Change Requests (CRs) f
 **Goal**: Automate the initial review of features/requests using AI agents representing different stakeholders (Product Owner, Architect, Security, etc.).
 
 ### System Architecture
-- **Orchestrator**: `evaluate.py` - Main script that loads a CR, queries agents, and generates an **Executive Summary**.
-- **Agents**: Defined in `agents/definitions.py`.
-    - **Product Owner**: Strategy & ROI.
-    - **Business Analyst**: Requirements & Gaps.
-    - **System Architect**: Tech Feasibility & RAG Compliance.
-    - **Software Engineer**: Implementation Effort.
-    - **Security Specialist**: PCI-DSS & Fraud.
-    - **QA Strategist**: Edge Cases & Test Data.
-    - **DevOps / SRE**: Operability & Rollback.
-- **Knowledge Base (RAG)**: `knowledge_base/` containing policy docs (e.g., `architecture_rules.md`).
-- **Input**: Markdown files in `change_requests/<CR_Name>/`.
+- **Orchestration Layers**:
+    1.  **Generation**: `generate_cr.py` & `generate_functional_spec.py` (Create content).
+    2.  **Evaluation**: `evaluate.py` (Review content).
+    3.  **Summarization**: `generate_director_brief.py` (Strategic view).
+- **Agents**: Defined in `agents/definitions.py` (Evaluators) and `agents/generation_agents.py` (Creators).
+- **Knowledge Base (RAG)**: `knowledge_base/` containing policy docs.
+- **Web handlers**: `web_handlers.py` for future API integration.
 
-### Current Status (Version 1 - Jan 2026)
-- **Director-Ready Reporting**: Reports now start with a high-level "Go/No-Go" Executive Summary.
-- **RAG Enabled**: Agents check against `knowledge_base` rules.
-- **Local LLM**: configured to use `localhost:1234` by default.
+### Current Status (Version 2.0 - Jan 2026)
+- **Full Lifecycle Support**: From "Idea" -> "CR" -> "Spec" -> "Evaluation".
+- **Context Aware**: Agents are configured for **C#/.NET Core & XML** architecture.
+- **Director-Ready**: Dedicated scripts to generate high-level strategic briefs (`_DIRECTOR_BRIEF.md`).
+- **Input Flexibility**: CLI accepts raw text or `.txt` files.
 
 ## 🚀 How to Run
 
